@@ -1,0 +1,367 @@
+---
+title: "Exploratory Data Analysis"
+output: html_notebook
+author: "Ethan Bredall"
+---
+# Libraries Used
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+```
+
+# Summary
+
+This project aims to develop an additional numeric system to judge each creature within this gaming system on it's difficulty. I planned to do this by summarizing the statistics of each creature with a Z-Score of their stats within the same Challenge rating, which is the game developer's own way of categorizing creatures based on difficulty. This is intended to allow newer users or interested persons to be able to make quicker judgments about a creature's strength without delving deeper into researching their abilities or doing tests with the creatures in practice encounters.
+
+I believe to a reasonable degree that this project has succeeded. While my code and methods of data analysis do not include all information, as some is unavailable within the data frame that I utilized, within the statistics I did have available, my method of calculation proved to be a reasonable judgement. I was able to identify what is likely the strongest and weakest within their respective difficulty rankings from the game developers to a mostly accurate degree.
+
+# Purpose
+
+The purpose of this project is to ideally create a more usable method of cataloging creatures in the table top role playing game Dungeons and Dragons Fifth Edition, based on difficulty in an "encounter" as the game calls it. As for questions I would like answered, I believe it would be interesting to see what the hardest to defeat enemy based on all of these ideas is, as well as the weakest.
+
+# Data
+
+## What is Dungeons and Dragons?
+
+### Dungeons and dragons is a tabletop roleplaying game, essentially a more open choice board game, that primarily involves rolling dice with varying numbers of sides. Within this game are prewritten creatures for the players of the game to engage with and interact with. These creatures are given a "statblock" with "statistics" within it. The data frame used in this project shows some of the "statistics" of each of the creatures.
+
+## Data Tidying
+
+### Reading in the Data Table
+
+```{r}
+dndCreatures <- read.csv("C:/Users/ejbre/Downloads/Data Analytics/Project_Zip_Bredall/Data/Dd5e_monsters.csv")
+```
+
+### Challenge rating Data Tidying
+
+#### What is Challenge rating?
+
+This is at what level of strength within the game are the players expected to be to be able to defeat this creature in an all around average group of that strenght level consisting of four members.
+
+```{r}
+dndCreatures <- dndCreatures %>%
+  mutate(Challenge.rating = str_remove(Challenge.rating, "\\(.*\\)"))
+dndCreatures <- dndCreatures %>%
+  mutate(Challenge.rating = sapply(Challenge.rating, function(x) eval(parse(text = x))))
+```
+
+### HP Data Tidying
+
+#### What is HP?
+
+HP stands for "Hit Points", this is essentially the amount of numerical damage a creature within the game can take before falling unconscious or dying.
+
+```{r}
+dndCreatures <- dndCreatures %>%
+  mutate(HP = str_remove(HP, "\\(.*\\)")) %>%
+  mutate(HP = as.numeric(HP))
+```
+
+### Armor Class Data Tidying
+
+#### What is Armor Class?
+
+Armor class is simply the number needed to be able to successfully strike a creature with any kind of attack. To reach this number you would roll the twenty sided die used in the game and add any additional bonuses you might have due to game abilities, if it is equal to or greater than the creature's armor class number, you successfully strike the creature and can deal an amount of damage depending on whatever you used to do so.
+
+```{r}
+dndCreatures <- dndCreatures %>%
+  mutate(Armor = str_remove(Armor, "\\(.*\\)")) %>%
+  mutate(Armor = as.numeric(Armor))
+dndCreatures <- dndCreatures %>%
+  rename(Armor.class = Armor)
+```
+
+### Speed Data Tidying
+
+#### What is Speed?
+
+A creature's speed in Dungeons and Dragons is the amount of feet it can move within it's turn, this game is turn based, and while there are special exceptions, a creature can move this many feet on their turn. Each turn is contained within a "round", such that the turns taken are all meant to happen near simultaneously. This "round" is clarified to be exactly six seconds in time length.
+
+A creature in Dungeons and Dragons might have different ways of moving, such as being able to fly. In this regard, we have something in the game called "speed types", which are the types of ways a creature can use their allotted speed during their turn. These speed types include walking speed, burrowing speed, climbing speed, flying speed, hovering speed (which is technically flying but with some extra bonuses that aren't very relevant), and swimming speed. Which obviously correlate to walking, burrowing, climbing, flying, hovering, and swimming.
+
+```{r}
+#Separating types of speed
+dndCreatures <- dndCreatures %>%
+  mutate(Speed.types = gsub("[^a-zA-Z ]|\\bft\\b", "", Speed)) %>%
+  mutate(Speed.types = paste("walk ", Speed.types)) %>%
+  mutate(Speed.types = gsub("\\s{2,}", " ", Speed.types)) %>%
+  mutate(Speed.types = str_replace_all(Speed.types, "\\b(?!burrow|climb|fly|hover|swim|walk)\\w+\\b", ""))
+
+#Isolating speed to one number
+dndCreatures <- dndCreatures %>%
+  mutate(Speed = str_extract_all(Speed, "\\d+"), Speed = sapply(Speed, function(x) max(as.numeric(x), na.rm = TRUE)))
+```
+
+### Race and Alignment Tidying
+
+#### What is Creature type?
+
+A creature type is somewhat like a creature's Kingdom, as in taxonomy. A creature that we might call an "animal" would be referred to as a "Beast" in Dungeons and Dragons. Although in Dungeons and Dragons they have many things that would be closer considered animals that are not considered "Beast", such as all kinds of "humanoids" which includes humans as even we know them. The creature types include: Aberration, Beast, Celestial, Construct, Dragon, Elemental, Fey, Fiend, Giant, Humanoid, Monstrosity, Ooze, Plant, and Undead. Aberration is essentially Dungeons and Dragons version of aliens. Beast is it's version of basic animals such as cows or foxes. Celestial is it's version of animals, gods, or other "holy" beings. Construct is it's version of robots, this includes magically animated objects as well. Dragon is rather self explanatory, also being the game's namesake, it includes all creatures that are usually identified as dragons in mythology, including true dragons, wyverns, etc. Elemental is probably the hardest to explain, however creatures of this type are essentially beings made up of a material that the medieval world considered to be an element, such as air, water, or earth, however it also includes mythical creatures such as genies. Fey is it's version of the mythical creatures from European folklore, including fairies and other similar creatures. Giant is it's version of the giants in Nordic mythology, the Jotnar. Humanoid is primarily the typical fantasy races you'd see within actual society, humans, elves, dwarves, the like. Monstrosity is it's catch-all creature type, if a creature does not fit within another typing well enough, it is typically named a monstrosity, although this typing is also used for most artificially created creatures, whether through magic or genetic engineering. Ooze refers essentially to different species of man-sized amoebas, like what most people call "slimes" in other media. Plant is self explanatory as well, simply being any creature that is a plant, just as how we'd define them in real life, anything in the kingdom Plantae. Undead are also rather self explanatory, being formerly living creatures raised to "life" by magic or other means.
+
+#### What is Alignment?
+
+Simply put, alignment is a creature's morality. The alignment "system" utilizes a 3x3 grid to categorize most creatures based on two categories. How lawful something is, as in it's willingness and likeliness to follow a code, whether it's own or someone else's such as the legal code. Or how good something is, as in it's willingness and likeliness to do the right thing. Both of these categories are technically decided by the creature's own belief in it's own morality, as there are many examples where a creature knows it is being evil and as such it's alignment reflects that, while there are many examples where a creature believes it is good despite doing horrible things and yet it's alignment reflects it's own thoughts. These two categories have the following possible values, for the Lawful scale: Lawful, Neutral, or Chaotic. For the Good scale: Good, Neutral, Evil. For example: Chaotic Good, also called the "hero alignment".
+
+```{r}
+dndCreatures <- dndCreatures %>%
+  separate(Race.and.alignment, into = c("Creature.type", "Alignment"), sep = ", ")
+dndCreatures$Creature.type <- factor(dndCreatures$Creature.type, levels = rev(levels(factor(dndCreatures$Creature.type))))
+dndCreatures$Alignment <- factor(dndCreatures$Alignment, levels = rev(levels(factor(dndCreatures$Alignment))))
+```
+
+### Size Tidying
+
+#### What is Size?
+
+Size in Dungeons and Dragons is primarily related to how much space a creature takes up during the combat portion of the game, which is the most mechanically intensive part of the game, it is where the majority of these statistics are relevant, and where the turn based system I mentioned before is used. The size of a creature in this system is categorized into one of the following: Tiny, Small, Medium, Large, Huge, or Gargantuan. A tiny creature takes up a 2.5 ft/2.5 ft/2.5 ft cube of space within the combat portion of the game. Both a small and medium creature takes up a 5 ft/5 ft/5 ft cube of space within the combat portion of the game. A large creature takes up a 10 ft/10 ft/10 ft cube of space within the combat portion of the game. A huge creature takes up a 15 ft/15 ft/15 ft cube of space within the combat portion of the game. A gargantuan creature takes up a 20 ft/20 ft/20 ft cube of space within the combat portion of the game. This is not conducive to the actual height of the creature represented, but is rather simply the amount of space they are utilizing while fighting, in the same way that a human is not five feet wide, but may be able to reach up to ten feet away with their sword.
+
+```{r}
+dndCreatures$Size <- factor(dndCreatures$Size, levels = rev(levels(factor(dndCreatures$Size))))
+```
+
+## Dictionary
+
+```{r}
+dictionary <- data.frame(
+  Variable_Name = c("Name", "Size", "Creature.type", "Alignment", "HP", "Armor", "Speed", "Speed.Types", "Challenge.Rating", "SPTC", "zHP", "zAC", "zSpeed", "zSPTC", "difficulty"),
+  Description = c("The name of the creature, either it's species or individual names.", "The size category of the creature, from Tiny to Gargantuan.", "The creature type of the creature, aberration, elemental, humanoid, undead, etc.", "The alignment of the creature on the lawful to chaotic, good to evil scale.", "The hit points of the creature, how much health it has.", "The armor class of the creature, what score something needs to reach to successfully hit a creature.", "The speed of the creature, this is a brisk moving pace in ft per every six seconds.", "The ways in which the creature moves", "The challenge rating of the creature, this is what level do the players need to be to defeat this creature in an all around average party of four members.", "How many different speed types a creature has", "The Z-Score of a creature's HP compared to other creatures of the same challenge rating", "", "The Z-Score of a creature's armor class compared to other creatures of the same challenge rating", "The Z-Score of a creature's speed compared to other creatures of the same challenge rating", "The Z-Score of a creature's number of speed types compared to other creatures of the same challenge rating"),
+  Data_Type = c("Nominal", "Ordinal", "Nominal", "Ordinal", "Ratio", "Ratio", "Ratio", "Nominal", "Interval", "Ratio", "Ratio", "Ratio", "Ratio", "Ratio", "Ratio")
+)
+dictionary
+```
+
+## Descriptions
+
+```{r}
+dictionary
+```
+
+## New Information
+
+```{r}
+# Here I will attempt to add a method of accounting whether a creature is a good fit for a group of players to encounter, as the Challenge Rating system doesn't work very well.
+## Z Score Function for numerical columns
+zscore <- function(x, column, group, newColumn = "Z.Score") {
+  if (!column %in% colnames(x)) {
+    stop(paste("No", column, "found."))
+  }
+  if (!group %in% colnames(x)) {
+    stop(paste("No", group, "found."))
+  }
+  x <- x %>%
+    group_by(!!sym(group)) %>%
+    mutate(!!newColumn := (get(column) - mean(get(column), na.rm = TRUE)) / sd(get(column), na.rm = TRUE)) %>%
+    ungroup()
+  return(x)
+}
+
+## Counting function for non-numerical columns
+count <- function(x, column, newColumn = "Count") {
+  if (!column %in% colnames(x)) {
+    stop(paste("No", column, "found."))
+  }
+  x <- x %>%
+    mutate(!!newColumn := sapply(!!sym(column), function(y) {
+      length(strsplit(y, "\\s+")[[1]])
+    }))
+  return(x)
+}
+
+dndCreatures <- count(dndCreatures, "Speed.types", "SPTC")
+dndCreatures <- zscore(dndCreatures, "HP", "Challenge.rating", "zHP")
+dndCreatures <- zscore(dndCreatures, "Armor.class", "Challenge.rating", "zAC")
+dndCreatures <- zscore(dndCreatures, "Speed", "Challenge.rating", "zSpeed")
+dndCreatures <- zscore(dndCreatures, "SPTC", "Challenge.rating", "ZSPTC")
+
+## Actually creating the judging metric
+### This score is a simple metric of how much stronger or weaker a creature is compared to the average creature of the same CR
+dndCreatures <- dndCreatures %>%
+  mutate(difficulty = zHP + zAC + zSpeed + ZSPTC)
+
+Mean0250HP <- dndCreatures %>%
+  filter(Challenge.rating == 0.250) %>%
+  summarize(MeanHP = mean(as.numeric(HP), na.rm = TRUE))
+Mean0250HP
+Mean0250SP <- dndCreatures %>%
+  filter(Challenge.rating == 0.250) %>%
+  summarize(MeanSP = mean(as.numeric(Speed), na.rm = TRUE))
+Mean0250SP
+Mean0250SPT <- dndCreatures %>%
+  filter(Challenge.rating == 0.250) %>%
+  summarize(MeanSPT = mean(as.numeric(SPTC), na.rm = TRUE))
+Mean0250SPT
+Mean0250AC <- dndCreatures %>%
+  filter(Challenge.rating == 0.250) %>%
+  summarize(MeanAC = mean(as.numeric(Armor.class), na.rm = TRUE))
+Mean0250AC
+```
+
+The information found here quite interesting due to the large range involved, while it is a combined z-score and as such may not be completely representative of a creature's actual abilities, it still roughly categorizes them in how far above or below the mean for their Challenge rating they are. It labeled the creature "Flying Sword" as the highest above it's other creatures in the same Challenge Rating, and looking at the creature's information, I'd say it's mostly accurate, it has an insanely high 17 HP along with an insanely high 50 movement speed, seeing as it's only challenge rating 1/4 it makes sense, as it's HP is 2.03125 above average, it's speed is 12.65625 feet above average, it's number of speed types is 1.46875 more than average, and it's armor class is a whopping 5.21875 points above average. Meanwhile it rated the creature "Mage" as the weakest among other creatures in the same Challenge Rating, which I can understand why, in this data frame, it doesn't include things like abilities or conditional numbers, which would be like the Mage's spell casting, by far it's strongest statistic.
+
+## NA Values
+
+Over the time working on this project I did not see any major NA values that were not created through my manipulation of the data rather than the data itself, although there was a few small changes I was forced to change manually as I was unable to figure out how to code it out of the data table, those being within the creature type and alignment. The way I separated those two columns was by separating by the first comma in each case, there were a few creatures, I believe 7 or so that had a comma before their alignment and part of their creature type after that comma. I simply manually removed the comma from those specific cases.
+
+## Methodologies
+
+The primary editing I did for most of the columns was removing a lot of clutter, many of the columns had unnecessary info that did not aid anyone in analysis such as including how many dice were used to find the average of the creature's HP. Most of the data tidying was dedicated to simply removing things such as this. Only two of the columns needed further care, those being Speed/Speed types and Creature types/Alignment, this is because both of those columns were originally columns with combined information that was harder to utilize in things such as ggplot2 or even just base R plots and summarizing info, also much harder to filter things with. For these I primarily used mutate and separate along with gsub to essentially overwrite the columns with better versions that were cleaner.
+
+# Exploratory Data Analysis
+
+## Plots
+
+### Summary of Each Variable
+
+It's interesting seeing the counts of the creatures within the different size categories most of all, as it expresses a sort of "population" of the sizes of creatures in the world of Dungeons and Dragons. It's also interesting to see the different counts of the alignments for similar reasons, however it's slightly more unique as surprisingly enough, Evil alignments are much more populous than any others aside from "Unaligned" creatures, which are typically creatures with too low intelligence levels to understand what morality is. It's also interesting seeing the drastic differences between the maximum HP, held by the Tarrasque at 676 HP, and every other value within the five number summary of the HP column, seeing as even the highest value, being the 3rd quartile, is still over 500 HP below the Tarrasque's HP value.
+
+```{r}
+summary(dndCreatures)
+```
+
+### Side by side box plots
+
+This plot utilizes transformations to be able to be more readable, the Armor.class box plot is scaled up by a factor of 10, the Speed box plot is scaled up by a factor of 2, the Challenge.rating box plot is scaled up by a factor of 10. This graph shows the distribution of frequency of creatures based on the different values, I find it interesting to compare the boxplots and see how, after being scaled, they all look remarkably similar, which makes sense as most of these values are meant to increase together with only a few exceptions either having some values increase slower, such as the "Mage" creature, or increase much faster, such as with the "Flying Sword" creature.
+
+```{r}
+boxplot(
+  data.frame(
+    HP = dndCreatures$HP,
+    Armor.class = 10 * as.numeric(dndCreatures$Armor.class),
+    Speed = 2 * as.numeric(dndCreatures$Speed),
+    Challenge.rating = 10 * as.numeric(dndCreatures$Challenge.rating)
+  ),
+  outline = FALSE,
+  main = "Box plot of side by side numerical columns"
+)
+```
+
+### Histogram on Armor Class
+
+This chart is the most interesting, as it shows how common an armor class of 11-13 within the game truly is, being utilized for over 42% of all the creatures within this data frame. That said it also shows how the different size categories interact with those armor class values, something that I didn't realize before was that Gargantuan sized creatures almost always have the higher armor class values over other creatures. Seeing as armor class is a measure of how difficult it is to strike something, you'd expect the much smaller creatures which would logically be more evasive to have higher values in this, but we see in this chart that, simply put, this stops being true around challenge rating 18. I would predict that this is not simply because the smaller creatures stop being more evasive around that challenge rating, but more so that the data frame I utilized just doesn't have enough of the lower size category creatures to show any amount of them at higher diffculties.
+
+```{r}
+ggplot(dndCreatures, aes(x = Armor.class, color = Size)) +
+  geom_histogram(bins = 20) +
+  labs(title = "Frequency of Armor class Values")
+```
+
+### Histogram on HP
+
+I find this chart somewhat boring, the number of kinds of lower health creatures are quite common, as most dungeons and dragons creatures are intended to be fought in groups and as such are individually quite weak, only at harder difficulty levels do they grow in HP, which they are also meant to be fought in more single oriented combat. One enemy would be fighting a group of players, or if they have allied creatures, those allies would be much weaker. As a result, this entire chart is extremely skewed towards the left, with an extremely miniscule amount of creatures in each bin beyond the HP value of around 275.
+
+```{r}
+ggplot(dndCreatures, aes(x = HP, color = Size)) +
+  geom_histogram(bins = 15) +
+  labs(title = "Frequency of HP Range Values")
+```
+
+### Histogram on Speed
+
+Seeing as 30-60 speed is likely the most common amount of movement for a creature, this frequency chart makes perfect sense, although I was surprised to learn there are creatures with speeds as low as 5, with one creature having a speed of 0. In addition, while I had known about the creature with the highest speed depicted here, both in this chart (at 150 feet) and in the data frame, I was unaware as to it's actual speed statistic, I had assumed it was like the slightly lower challenge rating creatures of the same type, at a speed closer to 90 feet.
+
+```{r}
+ggplot(dndCreatures, aes(x = Speed, color = Size)) +
+  geom_histogram(bins = 7) +
+  labs(title = "Frequency of Speed Range Values")
+```
+
+### Scatter Plot of HP by Challenge Rating, Including a Trendline
+
+This is perfectly within expectations, as in that you would reasonably expect creatures rated for stronger groups of players to have higher HP stats, as that is the amount of damage they can take. In actual application, this graph, the trend line especially, is quite useful for both players and the person running the game (called the Dungeon Master or sometimes Game Master), it's useful for the players in estimating the strength of the creature they're interacting with, seeing as damage dealt is a number that the knowledge of is public within a game, a player can utilize this to estimate the HP statistic of the creature they're fighting and plug it into the y-value of this formula to determine an estimation of the creature's challenge rating. Meanwhile the Dungeon Master can utilize this trend line in a more simple way, for creating their own custom creatures, it would allow them to easily obtain a usable HP value that is rather balanced for the creature's challenge rating.
+
+```{r}
+HPLine <- lm(dndCreatures$HP ~ dndCreatures$Challenge.rating)
+coefficientsHP <- coef(HPLine)
+interceptHP <- round(coefficientsHP[1], 2)
+slopeHP <- round(coefficientsHP[2], 2)
+formulaHP <- paste0("y = ", slopeHP, "x + ", interceptHP)
+ggplot(dndCreatures, aes(x = Challenge.rating, y = HP, color = Size)) +
+  geom_point() +
+   geom_smooth(method = "lm", color = "green") +
+   annotate("text", x = 25, y = 310, label = formulaHP, size = 5) +
+  labs(title = "HP by Challenge Rating")
+```
+
+### Scatter Plot of Armor class by Challenge Rating
+
+This is also within my prior expectations, as Dungeons and Dragons has stated before the idea of "bounded accuracy", in which a player is expected only to be able to reach a certain level of additions to their dice rolls. This, I feel, ends up stifling some creativity and making the game worse for Dungeons Masters who enjoy creating unique custom equipment for their players, especially when the value that the game expects to be the maximum is still over a 50% chance of striking the highest armor class enemy in the game. In addition, despite the games expectation of that "realistic" addition to dice rolls, if developed and performed correctly, a player's character (the game piece they play as) can quite easily reach much higher than this bonus. This results in a player, even if not created with that much research, being able to hit the toughest of creatures roughly 65% of the time. (If you are curious, a very easy way to do this would be to use a short term benefit to your rolls, such as the item called "Oil of Sharpness", these can be acquired quite easily at the end of a game, and with enough dedication can even be made permanent. There are also multiple effects that do similar increases, ranging from adding 5% to adding 15% each, all of which can add linearly together).
+
+All of that said, this trend line depicted is still somewhat useful in creating custom creatures of lower challenge ratings, as they are expected to be much easier to hit.
+
+```{r}
+ACLine <- lm(dndCreatures$Armor.class ~ dndCreatures$Challenge.rating)
+coefficientsAC <- coef(ACLine)
+interceptAC <- round(coefficientsAC[1], 2)
+slopeAC <- round(coefficientsAC[2], 2)
+formulaAC <- paste0("y = ", slopeAC, "x + ", interceptAC)
+ggplot(dndCreatures, aes(x = Challenge.rating, y = Armor.class, color = Size, size = HP)) +
+  geom_point() +
+    geom_smooth(method = "lm", color = "green") +
+    annotate("text", x = 20, y = 25, label = formulaAC, size = 5) +
+  labs(title = "Armor Class by Challenge Rating")
+```
+
+### Scatter Plot of Size Category by Challenge Rating
+
+This plot displays a correlation between the larger sizes, higher challenge rating values, and higher HP values. This is expected, as logically a creature with more mass would require more damage in order to render it unconscious or dead, as would a creature that has a higher challenge rating, which is literally a statistic designed to be how difficult a creature is to fight.
+
+```{r}
+ggplot(dndCreatures, aes(x = Challenge.rating, y = Size, size = HP)) +
+  geom_point() +
+  labs(title = "Size by Challenge Rating")
+```
+
+### Scatter plot of Size Category by Speed
+
+In a similar way to the previous plot, this data is similarly expected, that being that a creature with larger legs would logically be able to go further with their stride, however I find it strange that size Large is the size category with the largest ranges of speeds, I would have expected medium or small due to their versatility within the game. In reality small and tiny don't really have speeds that are that high, which is the biggest unexpected part of this chart, as I stated before with regards to the armor class chart, you would logically think that a smaller creature, with a smaller body to hit, and likely more nimble, would be faster. This is clearly not true based on the information presented within the chart.
+
+```{r}
+ggplot(dndCreatures, aes(x = Speed, y = Size, size = HP)) +
+  geom_point() +
+  labs(title = "Size by Speed")
+```
+
+### Scatter Plot of Speed by Challenge Rating
+
+In a similar way to the previous two, this plot's information is also within expectations, that being that speeds range across the board in what is almost a bell curve shape, this makes logical sense as a lot of higher challenge rating creatures grow in size category or other ways rather than speed for a similar reason as to why the game tries to limit armor class, a player is only expected to be able to get their speed to a certain amount. The game would be rather frustrating if a creature was able to simply turn around and run away much faster than the players every time they were in danger.
+
+```{r}
+ggplot(dndCreatures, aes(x = Challenge.rating, y = Speed, color = Size, size = HP)) +
+  geom_point() +
+  labs(title = "Speed by Challenge Rating")
+```
+
+### Scatter Plot of Difficulty Above or Below Challenge Rating by Challenge Rating
+
+This scatter plot doesn't show much of any kind of correlation aside from the number of visible cases decreasing as challenge rating increases, which is simply due to the lower selection size of more difficult creatures. This, while better than having a clear bias, is not optimal in the balancing of the difficulty of the game, ideally this plot should have a much smaller range on the y-axis (difficulty, or combined z-score of numerical data axis), as to allow most creatures of similar challenge rating levels to be similarly difficult in gameplay.
+
+```{r}
+ggplot(dndCreatures, aes(x = Challenge.rating, y = difficulty, color = Size, size = HP)) +
+  geom_point() +
+  labs(title = "Difficulty Above or Below Challenge Rating by Challenge Rating")
+```
+
+### Data Frame
+
+```{r}
+dndCreatures
+```
+
+# Results
+
+This data analysis primarily used two methods, those being regression analysis, and factor analysis, depending on which variable I was analyzing. Regression analysis looks primarily at numerical data and it's relation with one another as independent and dependent variables, which apply to most of the numerical data and the variable Challenge.rating. Factor analysis primarily analyzes the independent variables that are showing a pattern contained within the data, such as higher size category creatures typically having larger health.
+The reason I chose these two methods primarily is because they simply are what makes sense for a game, other options for methods either fit but I don't believe as well, such as content analysis which is similar to factor analysis but less focused on analyzing underlying patterns, or methods that don't make much sense for this data table such as descriptive analysis, which would require me to find other data frames for newer versions of these creatures printed in different versions of the game.
+Within this data analysis, I found that consistently the numerical variables on average increased with the challenge rating values, and almost always correlated with one another in various ways, such as speed and HP increasing as size category increased due to a creature being larger and as such having more mass and a longer stride. I also was able to discover two trend lines that can be rather easily utilized for people who play the game and wish to either estimate an unknown creature's information, or create their own customized creatures for use within their games. One of which is average HP for a creature of a specific challenge rating, being y = 15.95x + 9.06, where x is the challenge rating and y is the HP value. While the other is average armor class for a creature of a specific challenge rating, being y = 0.42x + 12.15, where x is the challenge rating and y is the armor class value. Other than these, what I discovered is that by my personally created metrics, around 90 creatures out of this 324 listed can be considered too powerful for average game play. This is due to the combined z-scores of the numerically categorized variables within each creature's challenge rating is above one. This would mean the creature is above one standard deviation from the mean, in a sample, this would mean they are somewhere in the upper 16% of the population of creatures within their challenge rating, a relatively small range. Meanwhile about 96 are on the opposite side, and can be considered a little too weak for average game play. This is due to their combined z-scores of the numerically categorized variables within each creature's challenge rating being below negative one. This, similarly to the overly strong creatures but in reverse, would mean they are somewhere in the lower 16% of the population of creatures within their challenge rating. This metric for measurement however is not perfect as it doesn't include things such as spell casting, special abilities damage output, various methods of dealing damage, the senses the creature has, the creature's immunities to some forms of damage, taking half damage from some forms of damage, or the creature's immunities to some special harmful conditions that players utilize to gain an advantage. Something that was interesting I found was that the namesake creature of the game, the dragon, at almost all ages, is drastically above the other creatures within their challenge rating. This honestly makes perfect sense, as Dungeons and Dragons has stated before that they will sometimes make a game object much stronger than it's similarly leveled counterparts because of how iconic it is. Another example of this would be found within the game's spell casting, in the spell "Fireball". Something that is also interesting is the highest values of creatures within their challenge ratings for the individual variables, such as how the creature called a "Nightmare", essentially a demonic horse, has the highest speed for a challenge rating value of three, that being a whopping 90 feet, this translated into gameplay would essentially violate that previously established idea of allowing players to be able to outrun a creature if built right, as there is no way in the base version of the game to reach a speed on par with this creature at the intended level of difficulty for any consistent amount of time. This could easily lead to the players being outsped either when trying to run away, or chasing after a fleeing "Nightmare".
+
+# Conclusions
+
+In conclusion, I discovered that the challenge rating system incorrectly values the difficulty of encounters with 186 of 324 creatures analyzed, that is roughly 57.4% of all creatures analyzed in this data frame. I would like to analyze this data deeper in the future, as it's one of my most closely held hobbies, however the data frame I am using does not contain the abilities of each creature, their more individual game stats, nor does it include the amount of damage they do, as such limiting the distance we can go in analyzing this data.
+
+# References
+
+[5eTools](https://5e.tools/index.html)  
+[Kaggle Data Frame](https://www.kaggle.com/datasets/patrickgomes/dungeons-and-dragons-5e-monsters)
